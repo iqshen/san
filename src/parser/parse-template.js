@@ -9,6 +9,7 @@
 
 
 var Walker = require('./walker');
+var ExprType = require('./expr-type');
 var integrateAttr = require('./integrate-attr');
 var parseText = require('./parse-text');
 var svgTags = require('../browser/svg-tags');
@@ -57,7 +58,7 @@ function parseTemplate(source, options) {
     var walker = new Walker(source);
 
     var tagReg = /<(\/)?([a-z][a-z0-9-]*)\s*/ig;
-    var attrReg = /([-:0-9a-z\[\]_]+)(\s*=\s*(['"])([^\3]*?)\3)?\s*/ig;
+    var attrReg = /([-:0-9a-z\[\]_]+)(\s*=\s*(([^'"<>\s]+)|"([^"]*?)"|'([^']*?)'))?\s*/ig;
 
     var tagMatch;
     var currentNode = rootNode;
@@ -183,34 +184,67 @@ function parseTemplate(source, options) {
                 // #[end]
 
                 // 读取 attribute
-                var attrMatch = walker.match(attrReg);
+                var attrMatch = walker.match(attrReg, 1);
                 if (attrMatch) {
-
-                    // #[begin] error
-                    // 如果属性有 =，但没取到 value，报错
-                    if (
-                        walker.charCode(attrMatch.index + attrMatch[1].length) === 61
-                        && !attrMatch[2]
-                    ) {
-                        throw new Error(''
-                            + '[SAN ERROR] ' + getXPath(stack, tagName) + ' attribute `'
-                            + attrMatch[1] + '` is not wrapped with ""'
-                        );
-                    }
-                    // #[end]
-
                     integrateAttr(
                         aElement,
                         attrMatch[1],
-                        attrMatch[3] ? attrMatch[4] : void(0),
+                        attrMatch[2] ? (attrMatch[4] || (attrMatch[5] == null ? attrMatch[6] : attrMatch[5])) : void(0),
                         options
                     );
                 }
-
+                else {
+                    pushTextNode(walker.cut(beforeLastIndex, walker.index));
+                    aElement = null;
+                    break;
+                }
             }
 
             if (aElement) {
                 pushTextNode(source.slice(beforeLastIndex, tagMatchStart));
+
+                // handle show directive, append expr to style prop
+                if (aElement.directives.show) {
+                    // find style prop
+                    var styleProp = null;
+                    var propsLen = aElement.props.length;
+                    while (propsLen--) {
+                        if (aElement.props[propsLen].name === 'style') {
+                            styleProp = aElement.props[propsLen];
+                            break;
+                        }
+                    }
+
+                    var showStyleExpr = {
+                        type: ExprType.TERTIARY,
+                        segs: [
+                            aElement.directives.show.value,
+                            {type: ExprType.STRING, value: ''},
+                            {type: ExprType.STRING, value: ';display:none;'}
+                        ]
+                    };
+
+                    if (styleProp) {
+                        if (styleProp.expr.type === ExprType.TEXT) {
+                            styleProp.expr.segs.push(showStyleExpr);
+                        }
+                        else {
+                            aElement.props[propsLen].expr = {
+                                type: ExprType.TEXT,
+                                segs: [
+                                    styleProp.expr,
+                                    showStyleExpr
+                                ]
+                            };
+                        }
+                    }
+                    else {
+                        aElement.props.push({
+                            name: 'style',
+                            expr: showStyleExpr
+                        });
+                    }
+                }
 
                 // match if directive for else/elif directive
                 var elseDirective = aElement.directives['else'] // eslint-disable-line dot-notation
@@ -294,9 +328,29 @@ function parseTemplate(source, options) {
         }
 
         if (text) {
-            currentNode.children.push({
-                textExpr: parseText(text, options.delimiters)
-            });
+            var expr = parseText(text, options.delimiters);
+            var lastChild = currentNode.children[currentNode.children.length - 1];
+            var textExpr = lastChild && lastChild.textExpr;
+
+            if (textExpr) {
+                if (textExpr.segs) {
+                    textExpr.segs = textExpr.segs.concat(expr.segs || expr);
+                }
+                else if (textExpr.value != null && expr.value != null) {
+                    textExpr.value = textExpr.value + expr.value;
+                }
+                else {
+                    lastChild.textExpr = {
+                        type: ExprType.TEXT,
+                        segs: [textExpr].concat(expr.segs || expr)
+                    };
+                }
+            }
+            else {
+                currentNode.children.push({
+                    textExpr: expr
+                });
+            }
         }
     }
 }

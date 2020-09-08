@@ -39,7 +39,7 @@ var directiveParsers = {
             if (walker.match(/\s*trackby\s+/ig, 1)) {
                 var start = walker.index;
                 directive.trackBy = readAccessor(walker);
-                directive.trackBy.raw = walker.cut(start, walker.index);
+                directive.trackByRaw = walker.cut(start, walker.index);
             }
             return directive;
         }
@@ -85,6 +85,12 @@ var directiveParsers = {
         };
     },
 
+    'show': function (value) {
+        return {
+            value: parseExpr(value.replace(/(^\{\{|\}\}$)/g, ''))
+        };
+    },
+
     'transition': function (value) {
         return {
             value: parseCall(value)
@@ -108,7 +114,7 @@ function parseDirective(aNode, name, value, options) {
 
     var parser = directiveParsers[name];
     if (parser) {
-        (aNode.directives[name] = parser(value, options)).raw = value;
+        aNode.directives[name] = parser(value, options);
     }
 }
 

@@ -543,30 +543,6 @@ describe("Component", function () {
         });
     });
 
-    it("compile before new", function () {
-        var MyComponent = san.defineComponent({
-            template: '<span title="{{text}}">{{text}}</span>'
-        });
-
-        expect(MyComponent.prototype.aNode == null).toBeTruthy();
-        san.compileComponent(MyComponent);
-
-        expect(MyComponent.prototype.aNode != null).toBeTruthy();
-
-
-        var myComponent = new MyComponent({data: {text: 'Hello San!'}});
-
-        var wrap = document.createElement('div');
-        document.body.appendChild(wrap);
-        myComponent.attach(wrap);
-
-        var span = wrap.getElementsByTagName('span')[0];
-        expect(span.title).toBe('Hello San!');
-
-        myComponent.dispose();
-        document.body.removeChild(wrap);
-    });
-
     it("template as static property", function () {
         var MyComponent = san.defineComponent({});
         MyComponent.template = '<span title="{{color}}">{{color}}</span>';
@@ -738,8 +714,10 @@ describe("Component", function () {
             template: '<span title="{{text}}">{{text}}</span>'
         });
         var MyComponent = san.defineComponent({
-            getComponentType: function () {
-                return Label;
+            getComponentType: function (aNode) {
+                if (aNode.tagName === 'ui-label') {
+                    return Label;
+                }
             }
         });
 
@@ -2642,6 +2620,68 @@ describe("Component", function () {
 
         san.nextTick(function () {
             expect(span.title).toBe('ci');
+            done();
+            myComponent.dispose();
+            document.body.removeChild(wrap);
+        });
+    });
+
+    it("update prop from self attached, root is component", function (done) {
+        var MyComponent = san.defineComponent({
+            components: {
+                'ui-label': Label
+            },
+            template: '<ui-label text="{{name}}"></ui-label>',
+
+            attached: function () {
+                this.data.set('name', 'errorrik');
+            }
+        });
+
+
+        var myComponent = new MyComponent();
+        myComponent.data.set('name', 'erik');
+
+        var wrap = document.createElement('div');
+        document.body.appendChild(wrap);
+        myComponent.attach(wrap);
+
+        var span = wrap.getElementsByTagName('span')[0];
+        expect(span.title).toBe('erik');
+
+        san.nextTick(function () {
+            expect(span.title).toBe('errorrik');
+            done();
+            myComponent.dispose();
+            document.body.removeChild(wrap);
+        });
+    });
+
+    it("update prop from self attached, root is not a HTMLElement", function (done) {
+        var MyComponent = san.defineComponent({
+            components: {
+                'ui-label': Label
+            },
+            template: '<fragment><ui-label text="{{name}}"></ui-label></fragment>',
+
+            attached: function () {
+                this.data.set('name', 'errorrik');
+            }
+        });
+
+
+        var myComponent = new MyComponent();
+        myComponent.data.set('name', 'erik');
+
+        var wrap = document.createElement('div');
+        document.body.appendChild(wrap);
+        myComponent.attach(wrap);
+
+        var span = wrap.getElementsByTagName('span')[0];
+        expect(span.title).toBe('erik');
+
+        san.nextTick(function () {
+            expect(span.title).toBe('errorrik');
             done();
             myComponent.dispose();
             document.body.removeChild(wrap);
@@ -4846,6 +4886,770 @@ describe("Component", function () {
                 done();
             });
         });
+    });
+
+    it("fragment as component root", function (done) {
+        var MyComponent = san.defineComponent({
+            template: '<fragment>see <a href="{{link}}">{{linkText || name}}</a> to start <b>{{name}}</b> framework</fragment>'
+        });
+
+        var myComponent = new MyComponent({
+            data: {
+                link: 'https://baidu.github.io/san/',
+                name: 'San',
+                linkText: 'HomePage'
+            }
+        });
+
+        expect(myComponent.el == null).toBeTruthy();
+
+        var wrap = document.createElement('div');
+        document.body.appendChild(wrap);
+        myComponent.attach(wrap);
+
+        var as = wrap.getElementsByTagName('a');
+        var bs = wrap.getElementsByTagName('b');
+        expect(as.length).toBe(1);
+        expect(as[0].innerHTML).toBe('HomePage');
+        expect(bs[0].innerHTML).toBe('San');
+
+        myComponent.data.set('linkText', 'github');
+        myComponent.data.set('link', 'https://github.com/baidu/san/');
+        myComponent.data.set('name', 'san');
+        myComponent.nextTick(function () {
+            var as = wrap.getElementsByTagName('a');
+            var bs = wrap.getElementsByTagName('b');
+            expect(as.length).toBe(1);
+            expect(as[0].innerHTML).toBe('github');
+            expect(bs[0].innerHTML).toBe('san');
+
+            myComponent.dispose();
+            document.body.removeChild(wrap);
+            done();
+        });
+    });
+
+    it("fragment with if as component root", function (done) {
+        var MyComponent = san.defineComponent({
+            template: '<fragment s-if="!hidd">see <a href="{{link}}">{{linkText || name}}</a> to start <b>{{name}}</b> framework</fragment>'
+        });
+
+        var myComponent = new MyComponent({
+            data: {
+                link: 'https://baidu.github.io/san/',
+                name: 'San',
+                linkText: 'HomePage'
+            }
+        });
+
+        expect(myComponent.el == null).toBeTruthy();
+
+        var wrap = document.createElement('div');
+        document.body.appendChild(wrap);
+        myComponent.attach(wrap);
+
+
+        expect(wrap.innerHTML).toContain('see');
+        expect(wrap.innerHTML).toContain('framework');
+
+        var as = wrap.getElementsByTagName('a');
+        var bs = wrap.getElementsByTagName('b');
+        expect(as.length).toBe(1);
+        expect(as[0].innerHTML).toBe('HomePage');
+        expect(bs[0].innerHTML).toBe('San');
+
+        myComponent.data.set('linkText', 'github');
+        myComponent.data.set('link', 'https://github.com/baidu/san/');
+        myComponent.data.set('name', 'san');
+        myComponent.nextTick(function () {
+
+            expect(wrap.innerHTML).toContain('see');
+            expect(wrap.innerHTML).toContain('start');
+
+            var as = wrap.getElementsByTagName('a');
+            var bs = wrap.getElementsByTagName('b');
+            expect(as.length).toBe(1);
+            expect(as[0].innerHTML).toBe('github');
+            expect(bs[0].innerHTML).toBe('san');
+
+            myComponent.data.set('hidd', true);
+            myComponent.nextTick(function () {
+                var as = wrap.getElementsByTagName('a');
+                expect(as.length).toBe(0);
+                expect(wrap.innerHTML).not.toContain('see');
+                expect(wrap.innerHTML).not.toContain('framework');
+
+                myComponent.dispose();
+                document.body.removeChild(wrap);
+                done();
+            });
+        });
+    });
+
+    it("fragment as component root", function (done) {
+        var Child = san.defineComponent({
+            template: '<fragment>see <a href="{{link}}">{{linkText || name}}</a> to start <b>{{name}}</b> framework</fragment>'
+        });
+
+        var MyComponent = san.defineComponent({
+            template: '<div><x-child link="{{link}}" name="{{name}}" link-text="{{linkText}}"/></div>',
+            components: {
+                'x-child': Child
+            }
+        });
+
+        var myComponent = new MyComponent({
+            data: {
+                link: 'https://baidu.github.io/san/',
+                name: 'San',
+                linkText: 'HomePage'
+            }
+        });
+
+        var wrap = document.createElement('div');
+        document.body.appendChild(wrap);
+        myComponent.attach(wrap);
+
+        var as = wrap.getElementsByTagName('a');
+        var bs = wrap.getElementsByTagName('b');
+        expect(as.length).toBe(1);
+        expect(as[0].innerHTML).toBe('HomePage');
+        expect(bs[0].innerHTML).toBe('San');
+
+        myComponent.data.set('linkText', 'github');
+        myComponent.data.set('link', 'https://github.com/baidu/san/');
+        myComponent.data.set('name', 'san');
+        myComponent.nextTick(function () {
+            var as = wrap.getElementsByTagName('a');
+            var bs = wrap.getElementsByTagName('b');
+            expect(as.length).toBe(1);
+            expect(as[0].innerHTML).toBe('github');
+            expect(bs[0].innerHTML).toBe('san');
+
+            myComponent.dispose();
+            document.body.removeChild(wrap);
+            done();
+        });
+    });
+
+    it("fragment root el in for", function (done) {
+        var Child = san.defineComponent({
+            template: '<fragment>see <a href="{{link}}">{{linkText || name}}</a> to start <b>{{name}}</b> framework</fragment>'
+        });
+
+        var MyComponent = san.defineComponent({
+            template: '<div><x-child s-for="f in frameworks" link="{{f.link}}" name="{{f.name}}" link-text="{{f.linkText}}"/></div>',
+            components: {
+                'x-child': Child
+            }
+        });
+
+        var myComponent = new MyComponent({
+            data: {
+                frameworks: [
+                    {
+                        link: 'https://baidu.github.io/san/',
+                        name: 'San',
+                        linkText: 'HomePage'
+                    },
+                    {
+                        link: 'https://reactjs.org/',
+                        name: 'react',
+                        linkText: 'HomePage'
+                    },
+                    {
+                        link: 'https://vuejs.org/',
+                        name: 'Vue',
+                        linkText: 'HomePage'
+                    }
+                ]
+
+            }
+        });
+
+        var wrap = document.createElement('div');
+        document.body.appendChild(wrap);
+        myComponent.attach(wrap);
+
+        var as = wrap.getElementsByTagName('a');
+        var bs = wrap.getElementsByTagName('b');
+        expect(as.length).toBe(3);
+        expect(as[0].innerHTML).toBe('HomePage');
+        expect(bs[0].innerHTML).toBe('San');
+        expect(as[2].innerHTML).toBe('HomePage');
+        expect(bs[2].innerHTML).toBe('Vue');
+
+        myComponent.data.removeAt('frameworks', 1);
+        myComponent.data.set('frameworks[1].name', 'vue');
+        myComponent.nextTick(function () {
+            var as = wrap.getElementsByTagName('a');
+            var bs = wrap.getElementsByTagName('b');
+            expect(as.length).toBe(2);
+            expect(as[1].innerHTML).toBe('HomePage');
+            expect(bs[1].innerHTML).toBe('vue');
+
+            myComponent.data.push('frameworks', {
+                link: 'https://reactjs.org/',
+                name: 'react',
+                linkText: 'Home'
+            });
+
+            myComponent.nextTick(function () {
+                var as = wrap.getElementsByTagName('a');
+                var bs = wrap.getElementsByTagName('b');
+                expect(as.length).toBe(3);
+                expect(as[1].innerHTML).toBe('HomePage');
+                expect(bs[1].innerHTML).toBe('vue');
+                expect(as[2].innerHTML).toBe('Home');
+                expect(bs[2].innerHTML).toBe('react');
+
+                myComponent.dispose();
+                document.body.removeChild(wrap);
+                done();
+            });
+        });
+    });
+
+    it("component as component root", function (done) {
+        var Child = san.defineComponent({
+            template: '<h3>see <a href="{{link}}">{{linkText || name}}</a> to start <b>{{name}}</b> framework</h3>'
+        });
+
+        var MyComponent = san.defineComponent({
+            template: '<x-child link="{{link}}" name="{{framework}}" link-text="{{linkText}}" style="font-size:18px"/>',
+            components: {
+                'x-child': Child
+            }
+        });
+
+        var myComponent = new MyComponent({
+            data: {
+                link: 'https://baidu.github.io/san/',
+                framework: 'San',
+                linkText: 'HomePage'
+            }
+        });
+
+        var wrap = document.createElement('div');
+        document.body.appendChild(wrap);
+        myComponent.attach(wrap);
+
+
+        expect(myComponent.el.tagName).toBe('H3');
+        expect(myComponent.el.className).toBe('');
+        expect(!!myComponent.el.id).toBeFalsy();
+        expect(myComponent.el.style.fontSize).toContain('18');
+
+        var as = wrap.getElementsByTagName('a');
+        var bs = wrap.getElementsByTagName('b');
+        expect(as.length).toBe(1);
+        expect(as[0].innerHTML).toBe('HomePage');
+        expect(bs[0].innerHTML).toBe('San');
+
+        myComponent.data.set('linkText', 'github');
+        myComponent.data.set('link', 'https://github.com/baidu/san/');
+        myComponent.data.set('framework', 'san');
+        myComponent.nextTick(function () {
+            var as = wrap.getElementsByTagName('a');
+            var bs = wrap.getElementsByTagName('b');
+            expect(as.length).toBe(1);
+            expect(as[0].innerHTML).toBe('github');
+            expect(bs[0].innerHTML).toBe('san');
+
+            myComponent.dispose();
+            document.body.removeChild(wrap);
+            done();
+        });
+    });
+
+    it("component as component root, use s-bind", function (done) {
+        var Child = san.defineComponent({
+            template: '<h3>see <a href="{{link}}">{{linkText || name}}</a> to start <b>{{name}}</b> framework</h3>'
+        });
+
+        var MyComponent = san.defineComponent({
+            template: '<x-child s-bind="{{info}}" style="font-size:18px"/>',
+            components: {
+                'x-child': Child
+            }
+        });
+
+        var myComponent = new MyComponent({
+            data: {
+                info: {
+                    link: 'https://baidu.github.io/san/',
+                    name: 'San',
+                    linkText: 'HomePage'
+                }
+            }
+        });
+
+        var wrap = document.createElement('div');
+        document.body.appendChild(wrap);
+        myComponent.attach(wrap);
+
+
+        expect(myComponent.el.tagName).toBe('H3');
+        expect(myComponent.el.className).toBe('');
+        expect(!!myComponent.el.id).toBeFalsy();
+        expect(myComponent.el.style.fontSize).toContain('18');
+
+        var as = wrap.getElementsByTagName('a');
+        var bs = wrap.getElementsByTagName('b');
+        expect(as.length).toBe(1);
+        expect(as[0].innerHTML).toBe('HomePage');
+        expect(bs[0].innerHTML).toBe('San');
+
+        myComponent.data.set('info.linkText', 'github');
+        myComponent.data.set('info.link', 'https://github.com/baidu/san/');
+        myComponent.data.set('info.name', 'san');
+        myComponent.nextTick(function () {
+            var as = wrap.getElementsByTagName('a');
+            var bs = wrap.getElementsByTagName('b');
+            expect(as.length).toBe(1);
+            expect(as[0].innerHTML).toBe('github');
+            expect(bs[0].innerHTML).toBe('san');
+
+            myComponent.dispose();
+            document.body.removeChild(wrap);
+            done();
+        });
+    });
+
+    it("for directive as root", function (done) {
+        var MyComponent = san.defineComponent({
+            template: '<a s-for="item in list">{{item}}</a>'
+        });
+
+        var myComponent = new MyComponent({
+            data: {
+                list: ['err', 'lee', 'gray']
+            }
+        });
+
+        var wrap = document.createElement('div');
+        document.body.appendChild(wrap);
+        myComponent.attach(wrap);
+
+        expect(myComponent.el == null).toBeTruthy();
+
+        var as = wrap.getElementsByTagName('a');
+        expect(as.length).toBe(3);
+        expect(as[0].parentNode).toBe(wrap);
+        expect(as[0].innerHTML).toBe('err');
+        expect(as[1].innerHTML).toBe('lee');
+
+        myComponent.data.removeAt('list', 1);
+        myComponent.data.set('list[0]', 'errorrik');
+        myComponent.nextTick(function () {
+            var as = wrap.getElementsByTagName('a');
+            expect(as.length).toBe(2);
+            expect(as[1].parentNode).toBe(wrap);
+            expect(as[0].innerHTML).toBe('errorrik');
+            expect(as[1].innerHTML).toBe('gray');
+
+            myComponent.dispose();
+            document.body.removeChild(wrap);
+            done();
+        });
+    });
+
+    it("for directive with fragment as root", function (done) {
+        var MyComponent = san.defineComponent({
+            template: '<fragment s-for="item in list"><b>{{item.name}}</b><a>{{item.email}}</a></fragment>'
+        });
+
+        var myComponent = new MyComponent({
+            data: {
+                list: [
+                    {name: 'err', email: 'errorrik@gmail.com'},
+                    {name: 'lee', email: 'leeight@gmail.com'},
+                    {name: 'gray', email: 'xxx@outlook.com'}
+                ]
+            }
+        });
+
+        var wrap = document.createElement('div');
+        document.body.appendChild(wrap);
+        myComponent.attach(wrap);
+
+        expect(myComponent.el == null).toBeTruthy();
+
+        var as = wrap.getElementsByTagName('a');
+        var bs = wrap.getElementsByTagName('b');
+        expect(as.length).toBe(3);
+        expect(bs.length).toBe(3);
+        expect(as[0].parentNode).toBe(wrap);
+        expect(bs[0].innerHTML).toBe('err');
+        expect(bs[1].innerHTML).toBe('lee');
+
+        myComponent.data.removeAt('list', 1);
+        myComponent.data.set('list[0].name', 'errorrik');
+        myComponent.nextTick(function () {
+            var as = wrap.getElementsByTagName('a');
+            var bs = wrap.getElementsByTagName('b');
+            expect(as.length).toBe(2);
+            expect(as[1].parentNode).toBe(wrap);
+            expect(bs[0].innerHTML).toBe('errorrik');
+            expect(bs[1].innerHTML).toBe('gray');
+
+            myComponent.dispose();
+            document.body.removeChild(wrap);
+            done();
+        });
+    });
+
+    it("fragment as component root, detach and re-attach", function (done) {
+        var MyComponent = san.defineComponent({
+            template: '<fragment>see <a href="{{link}}">{{linkText || name}}</a> to start <b>{{name}}</b> framework</fragment>'
+        });
+
+        var myComponent = new MyComponent({
+            data: {
+                link: 'https://baidu.github.io/san/',
+                name: 'San',
+                linkText: 'HomePage'
+            }
+        });
+
+        expect(myComponent.el == null).toBeTruthy();
+
+        var wrap = document.createElement('div');
+        document.body.appendChild(wrap);
+        myComponent.attach(wrap);
+
+        var as = wrap.getElementsByTagName('a');
+        var bs = wrap.getElementsByTagName('b');
+        expect(as.length).toBe(1);
+        expect(as[0].innerHTML).toBe('HomePage');
+        expect(bs[0].innerHTML).toBe('San');
+
+        myComponent.data.set('linkText', 'github');
+        myComponent.data.set('link', 'https://github.com/baidu/san/');
+        myComponent.data.set('name', 'san');
+        myComponent.nextTick(function () {
+            var as = wrap.getElementsByTagName('a');
+            var bs = wrap.getElementsByTagName('b');
+            expect(as.length).toBe(1);
+            expect(as[0].innerHTML).toBe('github');
+            expect(bs[0].innerHTML).toBe('san');
+
+            myComponent.detach();
+            expect(wrap.innerHTML).toBe('');
+            expect(myComponent.lifeCycle.detached).toBeTruthy();
+
+            myComponent.attach(wrap);
+            expect(myComponent.lifeCycle.detached).toBeFalsy();
+            as = wrap.getElementsByTagName('a');
+            bs = wrap.getElementsByTagName('b');
+            expect(as.length).toBe(1);
+            expect(as[0].innerHTML).toBe('github');
+            expect(bs[0].innerHTML).toBe('san');
+
+            document.body.removeChild(wrap);
+            done();
+        });
+    });
+
+    it("component as component root, detach and re-attach", function (done) {
+        var Child = san.defineComponent({
+            template: '<h3>see <a href="{{link}}">{{linkText || name}}</a> to start <b>{{name}}</b> framework</h3>'
+        });
+
+        var MyComponent = san.defineComponent({
+            template: '<x-child link="{{link}}" name="{{framework}}" link-text="{{linkText}}" />',
+            components: {
+                'x-child': Child
+            }
+        });
+
+        var myComponent = new MyComponent({
+            data: {
+                link: 'https://baidu.github.io/san/',
+                framework: 'San',
+                linkText: 'HomePage'
+            }
+        });
+
+        var wrap = document.createElement('div');
+        document.body.appendChild(wrap);
+        myComponent.attach(wrap);
+
+        var as = wrap.getElementsByTagName('a');
+        var bs = wrap.getElementsByTagName('b');
+        expect(myComponent.el.tagName).toBe('H3');
+        expect(as.length).toBe(1);
+        expect(as[0].innerHTML).toBe('HomePage');
+        expect(bs[0].innerHTML).toBe('San');
+
+        myComponent.data.set('linkText', 'github');
+        myComponent.data.set('link', 'https://github.com/baidu/san/');
+        myComponent.data.set('framework', 'san');
+        myComponent.nextTick(function () {
+            var as = wrap.getElementsByTagName('a');
+            var bs = wrap.getElementsByTagName('b');
+            expect(as.length).toBe(1);
+            expect(as[0].innerHTML).toBe('github');
+            expect(bs[0].innerHTML).toBe('san');
+
+            myComponent.detach();
+            expect(wrap.innerHTML).toBe('');
+            expect(myComponent.lifeCycle.detached).toBeTruthy();
+
+            myComponent.attach(wrap);
+            expect(myComponent.lifeCycle.detached).toBeFalsy();
+            as = wrap.getElementsByTagName('a');
+            bs = wrap.getElementsByTagName('b');
+            expect(as.length).toBe(1);
+            expect(as[0].innerHTML).toBe('github');
+            expect(bs[0].innerHTML).toBe('san');
+
+
+            myComponent.dispose();
+            document.body.removeChild(wrap);
+            done();
+        });
+    });
+
+    it("for directive as root, detach and re-attach", function (done) {
+        var MyComponent = san.defineComponent({
+            template: '<a s-for="item in list">{{item}}</a>'
+        });
+
+        var myComponent = new MyComponent({
+            data: {
+                list: ['err', 'lee', 'gray']
+            }
+        });
+
+        var wrap = document.createElement('div');
+        document.body.appendChild(wrap);
+        myComponent.attach(wrap);
+
+        expect(myComponent.el == null).toBeTruthy();
+
+        var as = wrap.getElementsByTagName('a');
+        expect(as.length).toBe(3);
+        expect(as[0].parentNode).toBe(wrap);
+        expect(as[0].innerHTML).toBe('err');
+        expect(as[1].innerHTML).toBe('lee');
+
+        myComponent.data.removeAt('list', 1);
+        myComponent.data.set('list[0]', 'errorrik');
+        myComponent.nextTick(function () {
+            var as = wrap.getElementsByTagName('a');
+            expect(as.length).toBe(2);
+            expect(as[1].parentNode).toBe(wrap);
+            expect(as[0].innerHTML).toBe('errorrik');
+            expect(as[1].innerHTML).toBe('gray');
+
+            myComponent.detach();
+            expect(wrap.innerHTML).toBe('');
+            expect(myComponent.lifeCycle.detached).toBeTruthy();
+
+
+            myComponent.attach(wrap);
+            expect(myComponent.lifeCycle.detached).toBeFalsy();
+            as = wrap.getElementsByTagName('a');
+            expect(as.length).toBe(2);
+            expect(as[1].parentNode).toBe(wrap);
+            expect(as[0].innerHTML).toBe('errorrik');
+            expect(as[1].innerHTML).toBe('gray');
+
+            myComponent.dispose();
+            document.body.removeChild(wrap);
+            done();
+        });
+    });
+
+    it("if as component root, detach and re-attach", function (done) {
+        var MyComponent = san.defineComponent({
+            template: '<div s-if="!hidd">see <a href="{{link}}">{{linkText || name}}</a> to start <b>{{name}}</b> framework</div>'
+        });
+
+        var myComponent = new MyComponent({
+            data: {
+                link: 'https://baidu.github.io/san/',
+                name: 'San',
+                linkText: 'HomePage'
+            }
+        });
+
+        var wrap = document.createElement('div');
+        document.body.appendChild(wrap);
+        myComponent.attach(wrap);
+
+
+        expect(wrap.innerHTML).toContain('see');
+        expect(wrap.innerHTML).toContain('framework');
+
+        var as = wrap.getElementsByTagName('a');
+        var bs = wrap.getElementsByTagName('b');
+        expect(as.length).toBe(1);
+        expect(as[0].innerHTML).toBe('HomePage');
+        expect(bs[0].innerHTML).toBe('San');
+
+        myComponent.data.set('linkText', 'github');
+        myComponent.data.set('link', 'https://github.com/baidu/san/');
+        myComponent.data.set('name', 'san');
+        myComponent.nextTick(function () {
+
+            expect(wrap.innerHTML).toContain('see');
+            expect(wrap.innerHTML).toContain('start');
+
+            var as = wrap.getElementsByTagName('a');
+            var bs = wrap.getElementsByTagName('b');
+            expect(as.length).toBe(1);
+            expect(as[0].innerHTML).toBe('github');
+            expect(bs[0].innerHTML).toBe('san');
+
+            myComponent.detach();
+            expect(wrap.innerHTML).toBe('');
+            expect(myComponent.lifeCycle.detached).toBeTruthy();
+
+
+            myComponent.attach(wrap);
+            expect(myComponent.lifeCycle.detached).toBeFalsy();
+            as = wrap.getElementsByTagName('a');
+            expect(as.length).toBe(1);
+            expect(as[0].innerHTML).toBe('github');
+
+
+            myComponent.data.set('hidd', true);
+            myComponent.nextTick(function () {
+                var as = wrap.getElementsByTagName('a');
+                expect(as.length).toBe(0);
+                expect(wrap.innerHTML).not.toContain('see');
+                expect(wrap.innerHTML).not.toContain('framework');
+
+                myComponent.detach();
+                expect(wrap.innerHTML).toBe('');
+                expect(myComponent.lifeCycle.detached).toBeTruthy();
+
+
+                myComponent.attach(wrap);
+                expect(wrap.innerHTML).not.toBe('');
+                expect(myComponent.lifeCycle.detached).toBeFalsy();
+
+                myComponent.data.set('hidd', false);
+                myComponent.nextTick(function () {
+                    expect(wrap.innerHTML).toContain('see');
+                    expect(wrap.innerHTML).toContain('start');
+
+                    var as = wrap.getElementsByTagName('a');
+                    var bs = wrap.getElementsByTagName('b');
+                    expect(as.length).toBe(1);
+                    expect(as[0].innerHTML).toBe('github');
+                    expect(bs[0].innerHTML).toBe('san');
+
+                    myComponent.dispose();
+                    document.body.removeChild(wrap);
+                    done();
+                });
+
+            });
+        });
+    });
+    it("identify subcomponent with reserved hot tag", function() {
+        var Label = san.defineComponent({
+            template: '<span title="{{text}}">{{text}}</span>'
+        });
+
+        var MyComponent = san.defineComponent({
+            components: {
+                'b': Label
+            },
+
+            template: '<div><b text="{{name}}"></b></div>',
+
+            initData: function() {
+                return { name: 'erik' };
+            }
+        });
+
+        var myComponent = new MyComponent();
+
+        var wrap = document.createElement('div');
+        document.body.appendChild(wrap);
+        myComponent.attach(wrap);
+
+        var span = wrap.getElementsByTagName('span')[0];
+        expect(span.innerText).toBe('erik');
+        expect(span.title).toBe('erik');
+
+        myComponent.dispose();
+        document.body.removeChild(wrap);
+
+    });
+
+    it("identify subcomponent with reserved hot tag with getComponentType", function() {
+        var Label = san.defineComponent({
+            template: '<span title="{{text}}">{{text}}<i>{{tip}}</i></span>'
+        });
+        var MyComponent = san.defineComponent({
+            getComponentType: function(aNode) {
+                if (aNode.tagName === 'b') {
+                    return Label;
+                }
+            },
+
+            template: '<div><b text="{{name}}" tip="{{company}}"></b></div>',
+
+            initData: function() {
+                return { name: 'erik', company: 'baidu' };
+            }
+        });
+
+        var myComponent = new MyComponent();
+
+        var wrap = document.createElement('div');
+        document.body.appendChild(wrap);
+        myComponent.attach(wrap);
+
+        var span = wrap.getElementsByTagName('span')[0];
+        expect(span.innerText).toBe('erikbaidu');
+        expect(span.title).toBe('erik');
+
+        var i = wrap.getElementsByTagName('i')[0];
+        expect(i.innerText).toBe('baidu');
+
+        myComponent.dispose();
+        document.body.removeChild(wrap);
+    });
+
+
+
+    it("show directive apply to component", function (done) {
+        var Label = san.defineComponent({
+            template: '<span style="position:absolute">span</span>'
+        })
+        var MyComponent = san.defineComponent({
+            components: {'x-l': Label},
+            template: '<div><x-l s-show="num == 3" style="top:1px"/></div>'
+        });
+        var myComponent = new MyComponent({
+            data: {num: 2}
+        });
+
+        var wrap = document.createElement('div');
+        document.body.appendChild(wrap);
+        myComponent.attach(wrap);
+
+        var span = wrap.getElementsByTagName('span')[0];
+        expect(span.style.display).toBe('none');
+        expect(span.style.position).toBe('absolute');
+        expect(span.style.top).toBe('1px');
+
+        myComponent.data.set('num', 3);
+
+        myComponent.nextTick(function () {
+            expect(span.style.display).toBe('');
+            expect(span.style.position).toBe('absolute');
+            expect(span.style.top).toBe('1px');
+            myComponent.dispose();
+            document.body.removeChild(wrap);
+            done();
+        })
     });
 });
 
