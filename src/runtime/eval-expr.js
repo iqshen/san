@@ -38,6 +38,10 @@ function evalExpr(expr, data, owner) {
                     value = !value;
                     break;
 
+                case 43:
+                    value = +value;
+                    break;
+
                 case 45:
                     value = 0 - value;
                     break;
@@ -173,7 +177,7 @@ function evalExpr(expr, data, owner) {
 
                         case '_xclass':
                         case '_xstyle':
-                            value = value = DEFAULT_FILTERS[filterName](value, evalExpr(filter.args[0], data, owner));
+                            value = DEFAULT_FILTERS[filterName](value, evalExpr(filter.args[0], data, owner));
                             break;
 
                         default:

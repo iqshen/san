@@ -36,7 +36,7 @@ function IfNode(aNode, parent, scope, owner, reverseWalker) {
         ? parent
         : parent.parentComponent;
 
-    this.id = guid++;
+    this.id = guid();
     this.children = [];
 
     // #[begin] reverse
@@ -168,6 +168,11 @@ IfNode.prototype._update = function (changes) {
                 .attach(me.el.parentNode, me.el);
         }
     }
+};
+
+IfNode.prototype._getElAsRootNode = function () {
+    var child = this.children[0];
+    return child && child.el || this.el;
 };
 
 exports = module.exports = IfNode;
